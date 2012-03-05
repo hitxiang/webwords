@@ -1,9 +1,7 @@
 package com.typesafe.webwords.indexer
 
 import scala.collection.JavaConverters._
-import akka.actor.{ Index => _, _ }
-import akka.actor.Actor.actorOf
-import com.typesafe.webwords.common.CPUBoundActorPool
+import akka.actor._
 import java.net.URL
 import java.net.URI
 import java.net.URISyntaxException
@@ -12,6 +10,9 @@ import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
 import scala.collection.parallel._
 import com.typesafe.webwords.common.Index
+import akka.routing.{DefaultResizer, SmallestMailboxRouter}
+import akka.dispatch.Await
+import akka.util.duration._
 
 sealed trait IndexerRequest
 case class IndexHtml(url: URL, doc: String) extends IndexerRequest
@@ -26,15 +27,10 @@ case class IndexedHtml(index: Index) extends IndexerReply
  * parallel collections.
  */
 class IndexerActor
-    extends Actor
-    with CPUBoundActorPool {
+  extends Actor with ActorLogging {
 
-    // actorOf[Worker] doesn't work on nested classes
-    override def instance = actorOf(new Worker)
-
-    override def receive = _route
-
-    private class Worker extends Actor {
+    private class Worker
+      extends Actor with ActorLogging {
         import IndexerActor._
 
         private def links(doc: Document) = {
@@ -77,11 +73,38 @@ class IndexerActor
         override def receive = {
             case request: IndexerRequest => request match {
                 case IndexHtml(url, docString) =>
+                    log.debug("IndexHtml {}", url)
                     val doc = Jsoup.parse(docString, url.toExternalForm)
                     val index = Index(links(doc), wordCounts(doc))
-                    self.tryReply(IndexedHtml(index))
+                    log.debug("About to send index for {}", url)
+                    sender.tell(IndexedHtml(index), context.parent)
             }
         }
+    }
+
+    // attempt at CPU-bound fan-out
+    lazy val router = context.actorOf(Props().withCreator({ new Worker }).withRouter(
+        SmallestMailboxRouter(resizer = Option(DefaultResizer(
+            // BoundedCapacitor: create between lowerBound and upperBound delegates in the pool
+            lowerBound = 1,
+            upperBound = Runtime.getRuntime().availableProcessors() * 2,
+            // BasicRampup: rampupRate is percentage increase in capacity when all delegates are busy
+            // make this very small to aim for just 1 more actor per needed connection
+            rampupRate = 0.2,
+            // BasicBackoff: backoffThreshold is the percentage-busy to drop below before
+            // we reduce actor count
+            backoffThreshold = 0.7,
+            // BasicBackoff: backoffRate is the amount to back off when we are below backoffThreshold.
+            // this one is intended to be less than 1.0-backoffThreshold so we keep some slack.
+            backoffRate = 0.20
+        )))))
+
+
+    override def receive = {
+        case m =>
+            log.debug("IndexerActor handing of to router")
+            // send messages to the router
+            router forward m
     }
 }
 

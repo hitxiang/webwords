@@ -1,10 +1,12 @@
 package com.typesafe.webwords.indexer
 
 import akka.actor._
-import akka.actor.Actor.actorOf
+import akka.pattern.ask
 import com.typesafe.webwords.common._
 import java.util.concurrent.CountDownLatch
-import com.typesafe.webwords.common.AMQPCheck
+import akka.dispatch.Await
+import akka.util.duration._
+import akka.util.Timeout
 
 /**
  * This is the main() method for the indexer (worker) process.
@@ -12,14 +14,11 @@ import com.typesafe.webwords.common.AMQPCheck
  * storing results in a persistent cache (kept in MongoDB).
  */
 object Main extends App {
+    private val system = ActorSystem("WebWordsIndexer")
+
     val config = WebWordsConfig()
 
-    if (!AMQPCheck.check(config))
-        throw new Exception("AMQP not working (start the AMQP service?)")
-
-    val worker = actorOf(new WorkerActor(config))
-
-    worker.start
+    val worker = system.actorOf(Props().withCreator({ new WorkerActor(config) }), "index-worker")
 
     // kind of a hack maybe.
     val waitForever = new CountDownLatch(1)

@@ -2,12 +2,15 @@ package com.typesafe.webwords.common
 
 import java.net.URL
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.Executors
 import com.ning.http.client._
 import akka.actor._
 import akka.dispatch._
-import akka.event.EventHandler
+import akka.pattern.pipe
+import akka.util.duration._
+import akka.event.LoggingAdapter
+import akka.util.Duration
+import java.util.concurrent.{TimeoutException, Executors}
+
 
 sealed trait URLFetcherIncoming
 case class FetchURL(u: URL) extends URLFetcherIncoming
@@ -18,18 +21,20 @@ case class URLFetched(status: Int, headers: Map[String, String], body: String) e
 /**
  * This is an actor which encapsulates the AsyncHttpClient library.
  */
-class URLFetcher extends Actor {
+class URLFetcher extends Actor with ActorLogging {
 
+    import context.dispatcher
     private val asyncHttpClient = URLFetcher.makeClient
 
     override def receive = {
         case incoming: URLFetcherIncoming => {
             val f = incoming match {
                 case FetchURL(u) =>
-                    URLFetcher.fetchURL(asyncHttpClient, u)
+                    log.debug("FetchURL({})", u)
+                    URLFetcher.fetchURL(asyncHttpClient, u, log)
             }
 
-            self.channel.replyWith(f)
+            f pipeTo sender
         }
     }
 
@@ -57,11 +62,12 @@ object URLFetcher {
         new AsyncHttpClient(config)
     }
 
-    private def fetchURL(asyncHttpClient: AsyncHttpClient, u: URL): Future[URLFetched] = {
+    private def fetchURL(asyncHttpClient: AsyncHttpClient, u: URL, log: LoggingAdapter)(implicit context: ActorContext) : Future[URLFetched] = {
+        import context.dispatcher
+        val scheduler: Scheduler = context.system.scheduler
         // timeout the Akka future 50ms after we'd have timed out the request anyhow,
         // gives us 50ms to parse the response
-        val f = new DefaultCompletableFuture[URLFetched](asyncHttpClient.getConfig().getRequestTimeoutInMs() + 50,
-            TimeUnit.MILLISECONDS)
+        val p = withTimeout[URLFetched]((asyncHttpClient.getConfig().getRequestTimeoutInMs() + 50) millis, context.system.scheduler)
 
         val httpHandler = new AsyncHandler[Unit]() {
             httpInFlight.incrementAndGet()
@@ -80,14 +86,14 @@ object URLFetcher {
                         body
                     } catch {
                         case t: Throwable => {
-                            EventHandler.debug(this, t.getMessage)
-                            f.completeWithException(t)
+                            log.debug(t.getMessage)
+                            p.tryComplete(Left(t))
                             throw t // rethrow for benefit of AsyncHttpClient
                         }
                     } finally {
                         finished = true
                         httpInFlight.decrementAndGet()
-                        assert(f.isCompleted)
+                        assert(p.isCompleted)
                     }
                 }
             }
@@ -132,12 +138,19 @@ object URLFetcher {
 
                     val body = response.getResponseBody()
 
-                    f.completeWithResult(URLFetched(response.getStatusCode(), headers, body))
+                    p.complete(Right(URLFetched(response.getStatusCode(), headers, body)))
                 }
             }
         }
 
         asyncHttpClient.prepareGet(u.toExternalForm()).execute(httpHandler)
-        f
+        p
+    }
+
+    def withTimeout[T](at: Duration, scheduler: akka.actor.Scheduler)(implicit executor: ExecutionContext): Promise[T] = {
+        val p = Promise[T]()
+        val cancellable = scheduler.scheduleOnce(at) { p.tryComplete(Left(new TimeoutException("Scheduled timeout"))) }
+        p.onComplete(_ => cancellable.cancel)
+        p
     }
 }

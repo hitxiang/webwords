@@ -3,10 +3,17 @@ package com.typesafe.webwords.common
 import org.scalatest.matchers._
 import org.scalatest._
 import akka.actor._
-import akka.actor.Actor.actorOf
 import java.net.URL
+import akka.util.Timeout
+import akka.util.duration._
+import akka.pattern.ask
+import akka.dispatch.{Await, Future}
 
-class IndexStorageActorSpec extends FlatSpec with ShouldMatchers {
+class IndexStorageActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll {
+    implicit val system = ActorSystem("IndexerActorSpec")
+
+    implicit val timeout = new Timeout(5000 millis)
+
     private val sampleIndex = Index(
         links = Seq(
             "dogs" -> "http://dogs.com/",
@@ -29,7 +36,8 @@ class IndexStorageActorSpec extends FlatSpec with ShouldMatchers {
     private val exampleUrl = new URL("http://example.com/")
     private val exampleUrl2 = new URL("http://example2.com/")
 
-    private def newActor = actorOf(new IndexStorageActor(Some("mongodb://localhost/webwordstest"))).start
+    private def newActor = system.actorOf(Props[IndexStorageActor].withCreator({
+        new IndexStorageActor(Some("mongodb://localhost/webwordstest")) }))
 
     behavior of "IndexStorageActor"
 
@@ -37,8 +45,8 @@ class IndexStorageActorSpec extends FlatSpec with ShouldMatchers {
         storage ! CacheIndex(url.toExternalForm, index)
     }
 
-    private def fetchIndex(storage: ActorRef, url: URL): Index = {
-        (storage ? FetchCachedIndex(url.toExternalForm)).get match {
+    private def fetchIndex(storage: ActorRef, url: URL): Future[Index] = {
+        (storage ? FetchCachedIndex(url.toExternalForm)) map {
             case CachedIndexFetched(Some(index)) =>
                 index
             case whatever =>
@@ -46,8 +54,8 @@ class IndexStorageActorSpec extends FlatSpec with ShouldMatchers {
         }
     }
 
-    private def cacheSize(storage: ActorRef): Long = {
-        (storage ? GetCacheSize).get match {
+    private def cacheSize(storage: ActorRef): Future[Long] = {
+        (storage ? GetCacheSize) map {
             case CacheSize(x) => x
             case whatever =>
                 throw new Exception("failed to get cache size, got: " + whatever)
@@ -57,45 +65,49 @@ class IndexStorageActorSpec extends FlatSpec with ShouldMatchers {
     it should "drop the cache in case of leftovers" in {
         val storage = newActor
         storage ! DropCache
-        cacheSize(storage) should be(0)
-        storage.stop
+        val size = Await.result(cacheSize(storage), timeout.duration)
+        size should be(0)
+        system.stop(storage)
     }
 
     it should "store and retrieve an index" in {
         val storage = newActor
         cacheIndex(storage, exampleUrl, sampleIndex)
-        val fetched = fetchIndex(storage, exampleUrl)
+        val fetched = Await.result(fetchIndex(storage, exampleUrl), timeout.duration)
         fetched should be(sampleIndex)
-        storage.stop
+        system.stop(storage)
     }
 
     it should "store and retrieve an empty index" in {
         val storage = newActor
         cacheIndex(storage, exampleUrl2, emptyIndex)
-        val fetched = fetchIndex(storage, exampleUrl2)
+        val fetched = Await.result(fetchIndex(storage, exampleUrl2), timeout.duration)
         fetched should be(emptyIndex)
-        storage.stop
+        system.stop(storage)
     }
 
     it should "use the newest entry" in {
         val storage = newActor
         // check we have leftovers from previous test
-        val fetched = fetchIndex(storage, exampleUrl)
+        val fetched = Await.result(fetchIndex(storage, exampleUrl), timeout.duration)
         fetched should be(sampleIndex)
         // now replace the leftovers
         cacheIndex(storage, exampleUrl, anotherIndex)
-        val newIndex = fetchIndex(storage, exampleUrl)
+        val newIndex = Await.result(fetchIndex(storage, exampleUrl), timeout.duration)
         newIndex should be(anotherIndex)
-        storage.stop
+        system.stop(storage)
     }
 
     it should "drop the cache" in {
         val storage = newActor
         // check we have leftovers from a previous test
-        val fetched = fetchIndex(storage, exampleUrl)
+        val fetched = Await.result(fetchIndex(storage, exampleUrl), timeout.duration)
         fetched should be(anotherIndex)
         storage ! DropCache
-        cacheSize(storage) should be(0)
-        storage.stop
+        val size = Await.result(cacheSize(storage), timeout.duration)
+        size should be(0)
+        system.stop(storage)
     }
+
+    override def afterAll = { system.shutdown() }
 }

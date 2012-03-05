@@ -7,7 +7,7 @@ object BuildSettings {
     import Resolvers._
 
     val buildOrganization = "com.typesafe"
-    val buildVersion = "1.0"
+    val buildVersion = "2.0-SNAPSHOT"
     val buildScalaVersion = "2.9.1"
 
     val globalSettings = Seq(
@@ -16,18 +16,18 @@ object BuildSettings {
         scalaVersion := buildScalaVersion,
         scalacOptions += "-deprecation",
         fork in test := true,
-        libraryDependencies ++= Seq(slf4jSimpleTest, scalatest, jettyServerTest),
-        resolvers := Seq(scalaToolsRepo, jbossRepo,
-                         akkaRepo, sonatypeRepo))
+        libraryDependencies ++= Seq(slf4jSimpleTest, scalatest),
+        resolvers ++= Seq(typesafeRepo, typesafeSnapshotRepo))
 
     val projectSettings = Defaults.defaultSettings ++ globalSettings
 }
 
 object Resolvers {
-    val sonatypeRepo = "Sonatype Release" at "http://oss.sonatype.org/content/repositories/releases"
-    val scalaToolsRepo = "Scala Tools" at "http://scala-tools.org/repo-snapshots/"
-    val jbossRepo = "JBoss" at "http://repository.jboss.org/nexus/content/groups/public/"
-    val akkaRepo = "Akka" at "http://akka.io/repository/"
+    val typesafeRepo = "Typesafe Repository" at
+        "http://repo.typesafe.com/typesafe/releases/"
+
+    val typesafeSnapshotRepo = "Typesafe Snapshots Repository" at
+        "http://repo.typesafe.com/typesafe/snapshots/"
 }
 
 object Dependencies {
@@ -35,14 +35,11 @@ object Dependencies {
     val slf4jSimple = "org.slf4j" % "slf4j-simple" % "1.6.2"
     val slf4jSimpleTest = slf4jSimple % "test"
 
-    val jettyVersion = "7.4.0.v20110414"
-    val jettyServer = "org.eclipse.jetty" % "jetty-server" % jettyVersion
-    val jettyServlet = "org.eclipse.jetty" % "jetty-servlet" % jettyVersion
-    val jettyServerTest = jettyServer % "test"
+    val playMini = "com.typesafe" %% "play-mini" % "2.0-RC3"
 
-    val akka = "se.scalablesolutions.akka" % "akka-actor" % "1.3.1"
-    val akkaHttp = "se.scalablesolutions.akka" % "akka-http" % "1.3.1"
-    val akkaAmqp = "se.scalablesolutions.akka" % "akka-amqp" % "1.3.1"
+    val akka = "com.typesafe.akka" % "akka-actor" % "2.0-RC4"
+
+    val akkaRemote = "com.typesafe.akka" % "akka-remote" % "2.0-RC4"
 
     val asyncHttp = "com.ning" % "async-http-client" % "1.6.5"
 
@@ -54,32 +51,35 @@ object Dependencies {
 object WebWordsBuild extends Build {
     import BuildSettings._
     import Dependencies._
-    import Resolvers._
 
     override lazy val settings = super.settings ++ globalSettings
 
     lazy val root = Project("webwords",
-                            file("."),
-                            settings = projectSettings ++
-                            Seq(
-                                StartScriptPlugin.stage in Compile := Unit
-                            )) aggregate(common, web, indexer)
+        file("."),
+        settings = projectSettings ++
+            Seq(
+                StartScriptPlugin.stage in Compile := Unit
+            )) aggregate(common, web, indexer)
 
     lazy val web = Project("webwords-web",
-                           file("web"),
-                           settings = projectSettings ++
-                           StartScriptPlugin.startScriptForClassesSettings ++
-                           Seq(libraryDependencies ++= Seq(akkaHttp, jettyServer, jettyServlet, slf4jSimple))) dependsOn(common % "compile->compile;test->test")
+        file("web"),
+        settings = projectSettings ++
+            Seq(libraryDependencies ++= Seq(playMini),
+                mainClass in Compile := Some("play.core.server.NettyServer"),
+                mainClass in run := Some("play.core.server.NettyServer")) ++
+            StartScriptPlugin.startScriptForClassesSettings
+    ) dependsOn(common % "compile->compile;test->test")
 
     lazy val indexer = Project("webwords-indexer",
-                              file("indexer"),
-                              settings = projectSettings ++
-                              StartScriptPlugin.startScriptForClassesSettings ++
-                              Seq(libraryDependencies ++= Seq(jsoup))) dependsOn(common % "compile->compile;test->test")
+        file("indexer"),
+        settings = projectSettings ++
+            Seq(libraryDependencies ++= Seq(jsoup, slf4jSimple)) ++
+            StartScriptPlugin.startScriptForClassesSettings
+    ) dependsOn(common % "compile->compile;test->test")
 
     lazy val common = Project("webwords-common",
-                           file("common"),
-                           settings = projectSettings ++
-                           Seq(libraryDependencies ++= Seq(akka, akkaAmqp, asyncHttp, casbahCore)))
+        file("common"),
+        settings = projectSettings ++
+            Seq(libraryDependencies ++= Seq(akka, akkaRemote, asyncHttp, casbahCore)))
 }
 

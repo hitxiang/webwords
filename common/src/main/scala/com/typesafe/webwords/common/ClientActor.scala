@@ -1,10 +1,11 @@
 package com.typesafe.webwords.common
 
-import java.net.URL
-
-import akka.actor.{ Index => _, _ }
-import akka.actor.Actor.actorOf
+import akka.actor._
 import akka.dispatch._
+import akka.pattern.{ask, pipe}
+import akka.util.Timeout
+import akka.util.duration._
+import scala.Option
 
 sealed trait ClientActorIncoming
 case class GetIndex(url: String, skipCache: Boolean) extends ClientActorIncoming
@@ -20,24 +21,25 @@ case class GotIndex(url: String, index: Option[Index], cacheHit: Boolean) extend
  * It coordinates a WorkQueueClientActor and IndexStorageActor to accomplish
  * this.
  */
-class ClientActor(config: WebWordsConfig) extends Actor {
-    import ClientActor._
+class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
 
-    private val client = actorOf(new WorkQueueClientActor(config.amqpURL))
-    private val cache = actorOf(new IndexStorageActor(config.mongoURL))
+    private val client = context.actorOf(Props().withCreator({ new WorkQueueClientActor(config.indexerPath) }), "work-queue-client")
+    private val cache = context.actorOf(Props().withCreator({ new IndexStorageActor(config.mongoURL) }), "index-storage")
 
     override def receive = {
         case incoming: ClientActorIncoming =>
+            log.debug("ClientActorIncoming")
             incoming match {
                 case GetIndex(url, skipCache) =>
-
+                    log.debug("GetIndex {} {}", url, skipCache)
                     // we look in the cache, if that fails, ask spider to
                     // spider and then notify us, and then we look in the
                     // cache again.
                     def getWithoutCache = {
+                        import context.dispatcher
                         getFromWorker(client, url) flatMap { _ =>
                             getFromCacheOrElse(cache, url, cacheHit = false) {
-                                new AlreadyCompletedFuture[GotIndex](Right(GotIndex(url, index = None, cacheHit = false)))
+                                Promise.successful(GotIndex(url, index = None, cacheHit = false))
                             }
                         }
                     }
@@ -47,26 +49,17 @@ class ClientActor(config: WebWordsConfig) extends Actor {
                     else
                         getFromCacheOrElse(cache, url, cacheHit = true) { getWithoutCache }
 
-                    self.channel.replyWith(futureGotIndex)
+                    futureGotIndex pipeTo sender
             }
     }
 
-    override def preStart = {
-        client.start
-        cache.start
-    }
+    implicit val timeout = Timeout(5000 milliseconds)
 
-    override def postStop = {
-        client.stop
-        cache.stop
-    }
-}
-
-object ClientActor {
     private def getFromCacheOrElse(cache: ActorRef, url: String, cacheHit: Boolean)(fallback: => Future[GotIndex]): Future[GotIndex] = {
+        import context.dispatcher
         cache ? FetchCachedIndex(url) flatMap {
             case CachedIndexFetched(Some(index)) =>
-                new AlreadyCompletedFuture(Right(GotIndex(url, Some(index), cacheHit)))
+                Promise.successful(GotIndex(url, Some(index), cacheHit))
             case CachedIndexFetched(None) =>
                 fallback
         }

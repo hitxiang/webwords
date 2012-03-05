@@ -4,10 +4,13 @@ import org.scalatest.matchers._
 import org.scalatest._
 import scala.io.Source
 import akka.actor._
-import akka.actor.Actor.actorOf
+import akka.pattern.ask
+import akka.util.duration._
 import java.net.URL
+import akka.util.Timeout
+import akka.dispatch.Await
 
-class IndexerActorSpec extends FlatSpec with ShouldMatchers {
+class IndexerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll {
     behavior of "splitWords"
 
     it should "split one word" in {
@@ -83,23 +86,32 @@ class IndexerActorSpec extends FlatSpec with ShouldMatchers {
             ("higher", 11), ("data", 11), ("2011", 11), ("2008", 11), ("logic", 11), ("type", 11), ("29", 11),
             ("other", 11), ("2007", 10), ("Language", 10), ("contrast", 10)))
 
+    implicit val system = ActorSystem("IndexerActorSpec")
+
+    implicit val timeout = new Timeout(5000 millis)
+
     it should "index some sample HTML" in {
         val html = load("Functional_programming.html")
-        val indexer = actorOf[IndexerActor].start
-        val result = (indexer ? IndexHtml(new URL("http://en.wikipedia.org/wiki/"), html)).as[IndexedHtml].get
+        val indexer = system.actorOf(Props[IndexerActor])
+        val future = indexer ? IndexHtml(new URL("http://en.wikipedia.org/wiki/"), html)
+        val result = Await.result(future.mapTo[IndexedHtml], timeout.duration)
         result.index.links.size should be(593)
         result.index.wordCounts.toSeq should be(wordsInSamples("Functional_programming.html"))
+        system.stop(indexer)
     }
 
     it should "index a lot of HTML concurrently" in {
         val html = load("Functional_programming.html")
-        val indexer = actorOf[IndexerActor].start
+        val indexer = system.actorOf(Props[IndexerActor])
         val futures = for (i <- 1 to 20)
             yield indexer ? IndexHtml(new URL("http://en.wikipedia.org/wiki/"), html)
         for (f <- futures) {
-            val result = f.as[IndexedHtml].get
+            val result = Await.result(f.mapTo[IndexedHtml], timeout.duration)
             result.index.links.size should be(593)
             result.index.wordCounts.toSeq should be(wordsInSamples("Functional_programming.html"))
         }
+        system.stop(indexer)
     }
+
+    override def afterAll = { system.shutdown() }
 }

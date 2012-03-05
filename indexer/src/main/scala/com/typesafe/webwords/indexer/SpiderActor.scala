@@ -6,10 +6,12 @@ import java.net.URL
 
 import com.typesafe.webwords.common._
 
-import akka.actor.{ Index => _, _ }
-import akka.actor.Actor.actorOf
+import akka.actor._
+import akka.pattern.ask
+import akka.util.duration._
+import akka.util.Timeout
 import akka.dispatch._
-import akka.event.EventHandler
+import akka.event.LoggingAdapter
 
 sealed trait SpiderRequest
 case class Spider(url: URL) extends SpiderRequest
@@ -28,34 +30,30 @@ case class Spidered(url: URL, index: Index)
  * functional programming.
  */
 class SpiderActor
-    extends Actor {
-    private val indexer = actorOf[IndexerActor]
-    private val fetcher = actorOf[URLFetcher]
+    extends Actor with ActorLogging {
 
-    override def preStart() = {
-        indexer.start
-        fetcher.start
-    }
-
-    override def postStop() = {
-        indexer.stop
-        fetcher.stop
-    }
+    private val indexer = context.actorOf(Props[IndexerActor], "indexer")
+    private val fetcher = context.actorOf(Props[URLFetcher], "url-fetcher")
 
     override def receive = {
         case request: SpiderRequest => request match {
             case Spider(url) =>
-                self.channel.replyWith(SpiderActor.spider(indexer, fetcher, url))
+                log.debug("Spider({})", url)
+                import context.dispatcher
+                sender ! SpiderActor.spider(indexer, fetcher, url, log)
         }
     }
 }
 
 object SpiderActor {
-    private def fetchBody(fetcher: ActorRef, url: URL): Future[String] = {
+    implicit val timeout = new Timeout(5000 milliseconds)
+
+    private def fetchBody(fetcher: ActorRef, url: URL, log: LoggingAdapter)(implicit context: ActorContext): Future[String] = {
+        import context.dispatcher
         val fetched = fetcher ? FetchURL(url)
         // there may be a cleaner solution here than returning an empty
         // document on failure, but let's go with this for now
-        val bodyFuture = new DefaultCompletableFuture[String]
+        val bodyFuture = new DefaultPromise[String]
         val maybeFailedFetch = fetched map {
             case URLFetched(status, headers, body) if status == 200 =>
                 // FIXME should probably filter out non-HTML content types
@@ -65,18 +63,18 @@ object SpiderActor {
             case whatever =>
                 throw new IllegalStateException("Unexpected reply to url fetch: " + whatever)
         }
-        maybeFailedFetch.onResult({ case x => bodyFuture.completeWithResult(x) })
-        maybeFailedFetch.onException({
+        maybeFailedFetch.onSuccess({ case x => bodyFuture.complete(Right(x)) })
+        maybeFailedFetch.onFailure({
             case e =>
-                EventHandler.info(this, "Exception fetching '" + url + "': " + e.getClass.getSimpleName + ": " + e.getMessage)
+                log.info("Exception fetching '{}': {}: ", url, e.getClass.getSimpleName, e.getMessage)
                 // and just pretend we got an empty document.
-                bodyFuture.completeWithResult("")
+                bodyFuture.complete(Right(""))
         })
         bodyFuture
     }
 
-    private def fetchIndex(indexer: ActorRef, fetcher: ActorRef, url: URL): Future[Index] = {
-        fetchBody(fetcher, url) flatMap { body =>
+    private def fetchIndex(indexer: ActorRef, fetcher: ActorRef, url: URL, log: LoggingAdapter)(implicit context: ActorContext): Future[Index] = {
+        fetchBody(fetcher, url, log) flatMap { body =>
             val indexed = indexer ? IndexHtml(url, body)
             indexed map {
                 case IndexedHtml(index) =>
@@ -159,12 +157,11 @@ object SpiderActor {
      * returns a future that will be completed when all the dependent
      * futures are also completed.
      */
-    private[indexer] def spider(indexer: ActorRef, fetcher: ActorRef, url: URL): Future[Spidered] = {
-        implicit val dispatcher = indexer.dispatcher
-        fetchIndex(indexer, fetcher, url) flatMap { rootIndex =>
-            val childIndexes = childLinksToFollow(url, rootIndex) map { fetchIndex(indexer, fetcher, _) }
-            val rootIndexFuture = new DefaultCompletableFuture[Index] // some 1.2 bug: AlreadyCompletedFuture breaks
-            rootIndexFuture.completeWithResult(rootIndex)
+    private[indexer] def spider(indexer: ActorRef, fetcher: ActorRef, url: URL, log: LoggingAdapter)(implicit context: ActorContext): Future[Spidered] = {
+        import context.dispatcher
+        fetchIndex(indexer, fetcher, url, log) flatMap { rootIndex =>
+            val childIndexes = childLinksToFollow(url, rootIndex) map { fetchIndex(indexer, fetcher, _, log) }
+            val rootIndexFuture = Promise.successful(rootIndex)
             val allIndexFutures = childIndexes ++ Iterator(rootIndexFuture)
             val allIndexes = Future.sequence(allIndexFutures)
             val combinedIndex = allIndexes map { indexes =>

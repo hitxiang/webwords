@@ -2,27 +2,14 @@ package com.typesafe.webwords
 
 import java.net.URI
 import java.net.URISyntaxException
-import akka.actor.Channel
-import akka.actor.ActorKilledException
-import akka.actor.ActorRef
-import akka.actor.LocalActorRef
-import akka.dispatch.Future
-import akka.dispatch.MessageInvocation
-import akka.dispatch.MessageQueue
-import akka.actor.Actor
-import akka.dispatch.CompletableFuture
-import akka.actor.ActorInitializationException
-import akka.dispatch.DefaultCompletableFuture
-import akka.dispatch.FutureTimeoutException
-import akka.actor.NullChannel
-import akka.actor.UntypedChannel
+import akka.actor._
 
 /**
  * This file contains random utility functions.
  * Some of them may be interesting.
  */
 package object common {
-
+/*
     // Class that adds replyWith to Akka channels
     class EnhancedChannel[-T](underlying: Channel[T]) {
         /**
@@ -102,7 +89,7 @@ package object common {
                 f
         }
     }
-
+*/
     private def stripSlash(s: String) =
         if (s == "")
             null
