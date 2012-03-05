@@ -8,7 +8,7 @@ object BuildSettings {
 
     val buildOrganization = "com.typesafe"
     val buildVersion = "1.0"
-    val buildScalaVersion = "2.9.0-1"
+    val buildScalaVersion = "2.9.1"
 
     val globalSettings = Seq(
         organization := buildOrganization,
@@ -40,9 +40,9 @@ object Dependencies {
     val jettyServlet = "org.eclipse.jetty" % "jetty-servlet" % jettyVersion
     val jettyServerTest = jettyServer % "test"
 
-    val akka = "se.scalablesolutions.akka" % "akka-actor" % "1.2"
-    val akkaHttp = "se.scalablesolutions.akka" % "akka-http" % "1.2"
-    val akkaAmqp = "se.scalablesolutions.akka" % "akka-amqp" % "1.2"
+    val akka = "se.scalablesolutions.akka" % "akka-actor" % "1.3.1"
+    val akkaHttp = "se.scalablesolutions.akka" % "akka-http" % "1.3.1"
+    val akkaAmqp = "se.scalablesolutions.akka" % "akka-amqp" % "1.3.1"
 
     val asyncHttp = "com.ning" % "async-http-client" % "1.6.5"
 
