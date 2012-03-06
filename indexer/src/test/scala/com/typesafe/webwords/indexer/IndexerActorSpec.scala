@@ -13,6 +13,10 @@ import akka.dispatch.Await
 class IndexerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll {
     behavior of "splitWords"
 
+    implicit val system = ActorSystem("IndexerActorSpec")
+
+    override def afterAll = { system.shutdown() }
+
     it should "split one word" in {
         val split = IndexerActor.splitWords("foo").toList
         split should be(List("foo"))
@@ -86,8 +90,6 @@ class IndexerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterA
             ("higher", 11), ("data", 11), ("2011", 11), ("2008", 11), ("logic", 11), ("type", 11), ("29", 11),
             ("other", 11), ("2007", 10), ("Language", 10), ("contrast", 10)))
 
-    implicit val system = ActorSystem("IndexerActorSpec")
-
     implicit val timeout = Timeout(5 seconds)
 
     it should "index some sample HTML" in {
@@ -112,6 +114,4 @@ class IndexerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterA
         }
         system.stop(indexer)
     }
-
-    override def afterAll = { system.shutdown() }
 }

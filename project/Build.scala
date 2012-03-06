@@ -16,7 +16,8 @@ object BuildSettings {
         scalaVersion := buildScalaVersion,
         scalacOptions += "-deprecation",
         fork in test := true,
-        libraryDependencies ++= Seq(slf4jSimpleTest, scalatest),
+        parallelExecution in test := false,
+        libraryDependencies ++= Seq(slf4jSimpleTest, scalatest, jettyServerTest),
         resolvers ++= Seq(typesafeRepo, typesafeSnapshotRepo))
 
     val projectSettings = Defaults.defaultSettings ++ globalSettings
@@ -32,14 +33,18 @@ object Resolvers {
 
 object Dependencies {
     val scalatest = "org.scalatest" %% "scalatest" % "1.6.1" % "test"
+
     val slf4jSimple = "org.slf4j" % "slf4j-simple" % "1.6.2"
     val slf4jSimpleTest = slf4jSimple % "test"
 
     val playMini = "com.typesafe" %% "play-mini" % "2.0-SNAPSHOT"
 
-    val akka = "com.typesafe.akka" % "akka-actor" % "2.0"
+    val jettyVersion = "7.4.0.v20110414"
+    val jettyServerTest = "org.eclipse.jetty" % "jetty-server" % jettyVersion % "test"
 
-    val akkaRemote = "com.typesafe.akka" % "akka-remote" % "2.0"
+    val akkaVersion = "2.0"
+    val akka = "com.typesafe.akka" % "akka-actor" % akkaVersion
+    val akkaRemote = "com.typesafe.akka" % "akka-remote" % akkaVersion
 
     val asyncHttp = "com.ning" % "async-http-client" % "1.6.5"
 

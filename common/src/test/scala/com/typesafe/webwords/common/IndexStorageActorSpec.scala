@@ -12,7 +12,9 @@ import akka.dispatch.{Await, Future}
 class IndexStorageActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll {
     implicit val system = ActorSystem("IndexerActorSpec")
 
-    implicit val timeout = Timeout(5 seconds)
+    override def afterAll = { system.shutdown() }
+
+    implicit val timeout = Timeout(10 seconds)
 
     private val sampleIndex = Index(
         links = Seq(
@@ -109,5 +111,4 @@ class IndexStorageActorSpec extends FlatSpec with ShouldMatchers with BeforeAndA
         system.stop(storage)
     }
 
-    override def afterAll = { system.shutdown() }
 }
