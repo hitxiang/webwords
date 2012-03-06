@@ -28,10 +28,9 @@ class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
 
     override def receive = {
         case incoming: ClientActorIncoming =>
-            log.debug("ClientActorIncoming")
             incoming match {
                 case GetIndex(url, skipCache) =>
-                    log.debug("GetIndex {} {}", url, skipCache)
+                    log.debug("GetIndex({}, {})", url, skipCache)
                     // we look in the cache, if that fails, ask spider to
                     // spider and then notify us, and then we look in the
                     // cache again.
@@ -53,7 +52,7 @@ class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
             }
     }
 
-    implicit val timeout = Timeout(5000 milliseconds)
+    implicit val timeout = Timeout(10 seconds)
 
     private def getFromCacheOrElse(cache: ActorRef, url: String, cacheHit: Boolean)(fallback: => Future[GotIndex]): Future[GotIndex] = {
         import context.dispatcher

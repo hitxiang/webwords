@@ -48,7 +48,7 @@ object WebMain extends Application {
                 <fieldset>
                     <div>
                         <label for="url">Site</label>
-                        <input type="text" id="url" name="url" value={ url } style="min-width: 300px;"></input>
+                        <input type="text" id="url" name="url" value={ url } style="min-width: 300px;"/>
                         {
                         if (badUrl) {
                             <div style="font-color: red;">Invalid or missing URL</div>
@@ -57,7 +57,7 @@ object WebMain extends Application {
                     </div>
                     <div>
                         {
-                        <input type="checkbox" id="skipCache" name="skipCache"></input> %
+                        <input type="checkbox" id="skipCache" name="skipCache" value="true"/> %
                             (if (skipCache) Attribute("checked", xml.Text(""), xml.Null) else xml.Null)
                         }
                         <label for="skipCache">Skip cache</label>
@@ -163,15 +163,11 @@ object WebMain extends Application {
     }
 
     private def handleWords(url: String, skipCache: Boolean) = {
-
-        println("WTF??? " + url + " : " + skipCache)
-        
         val parsedUrl = parseURL(url)
 
         if (parsedUrl.isDefined) {
-            println("WOHO! " + parsedUrl)
+            implicit val timeout = Timeout(10 seconds)
             val startTime = System.currentTimeMillis
-            implicit val timeout = Timeout(50000 milliseconds)
 
             AsyncResult {
                 (client ? GetIndex(parsedUrl.get.toExternalForm, skipCache)).mapTo[GotIndex].asPromise map {

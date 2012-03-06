@@ -1,9 +1,7 @@
 package com.typesafe.webwords.common
 
-import java.net.URI
 import java.net.URLEncoder
 import java.net.URLDecoder
-import akka.actor._
 
 sealed trait WorkQueueMessage {
     self: Product =>
@@ -42,22 +40,6 @@ sealed trait WorkQueueRequest extends WorkQueueMessage {
 case class SpiderAndCache(url: String) extends WorkQueueRequest
 
 object WorkQueueRequest {
-/* TODO:ban
-    private[common] val toBinary = new AMQP.ToBinary[WorkQueueRequest] {
-        override def toBinary(request: WorkQueueRequest) = request.toBinary
-    }
-
-    private[common] val fromBinary = new AMQP.FromBinary[WorkQueueRequest] {
-        override def fromBinary(bytes: Array[Byte]) = {
-            WorkQueueMessage.unpacked(bytes).toList match {
-                case "SpiderAndCache" :: url :: Nil =>
-                    SpiderAndCache(url)
-                case whatever =>
-                    throw new Exception("Bad message: " + whatever)
-            }
-        }
-    }
-*/
 }
 
 sealed trait WorkQueueReply extends WorkQueueMessage {
@@ -66,20 +48,4 @@ sealed trait WorkQueueReply extends WorkQueueMessage {
 case class SpideredAndCached(url: String) extends WorkQueueReply
 
 object WorkQueueReply {
-/* TODO:ban
-    private[common] val toBinary = new AMQP.ToBinary[WorkQueueReply] {
-        override def toBinary(reply: WorkQueueReply) = reply.toBinary
-    }
-
-    private[common] val fromBinary = new AMQP.FromBinary[WorkQueueReply] {
-        override def fromBinary(bytes: Array[Byte]) = {
-            WorkQueueMessage.unpacked(bytes).toList match {
-                case "SpideredAndCached" :: url :: Nil =>
-                    SpideredAndCached(url)
-                case whatever =>
-                    throw new Exception("Bad message: " + whatever)
-            }
-        }
-    }
-*/
 }

@@ -35,11 +35,11 @@ object Dependencies {
     val slf4jSimple = "org.slf4j" % "slf4j-simple" % "1.6.2"
     val slf4jSimpleTest = slf4jSimple % "test"
 
-    val playMini = "com.typesafe" %% "play-mini" % "2.0-RC3"
+    val playMini = "com.typesafe" %% "play-mini" % "2.0-SNAPSHOT"
 
-    val akka = "com.typesafe.akka" % "akka-actor" % "2.0-RC4"
+    val akka = "com.typesafe.akka" % "akka-actor" % "2.0"
 
-    val akkaRemote = "com.typesafe.akka" % "akka-remote" % "2.0-RC4"
+    val akkaRemote = "com.typesafe.akka" % "akka-remote" % "2.0"
 
     val asyncHttp = "com.ning" % "async-http-client" % "1.6.5"
 

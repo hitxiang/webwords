@@ -18,7 +18,7 @@ class WorkerActor(config: WebWordsConfig)
     private val spider = context.actorOf(Props[SpiderActor], "spider")
     private val cache = context.actorOf(Props().withCreator({ new IndexStorageActor(config.mongoURL) }), "index-storage")
 
-    implicit val timeout = Timeout(5000 milliseconds) // TODO:ban get from config
+    implicit val timeout = Timeout(10 seconds) // TODO:ban get from config
 
     override def handleRequest(request: WorkQueueRequest): Future[WorkQueueReply] = {
         request match {

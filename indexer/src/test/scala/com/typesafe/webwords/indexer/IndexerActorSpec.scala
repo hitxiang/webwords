@@ -88,7 +88,7 @@ class IndexerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterA
 
     implicit val system = ActorSystem("IndexerActorSpec")
 
-    implicit val timeout = new Timeout(5000 millis)
+    implicit val timeout = Timeout(5 seconds)
 
     it should "index some sample HTML" in {
         val html = load("Functional_programming.html")

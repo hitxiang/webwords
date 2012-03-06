@@ -7,7 +7,7 @@ import java.net.URL
 import com.typesafe.webwords.common._
 
 import akka.actor._
-import akka.pattern.ask
+import akka.pattern.{ask, pipe}
 import akka.util.duration._
 import akka.util.Timeout
 import akka.dispatch._
@@ -40,13 +40,13 @@ class SpiderActor
             case Spider(url) =>
                 log.debug("Spider({})", url)
                 import context.dispatcher
-                sender ! SpiderActor.spider(indexer, fetcher, url, log)
+                SpiderActor.spider(indexer, fetcher, url, log) pipeTo sender
         }
     }
 }
 
 object SpiderActor {
-    implicit val timeout = new Timeout(5000 milliseconds)
+    implicit val timeout = Timeout(5 seconds)
 
     private def fetchBody(fetcher: ActorRef, url: URL, log: LoggingAdapter)(implicit context: ActorContext): Future[String] = {
         import context.dispatcher

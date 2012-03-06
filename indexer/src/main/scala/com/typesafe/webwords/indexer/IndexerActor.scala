@@ -73,7 +73,7 @@ class IndexerActor
         override def receive = {
             case request: IndexerRequest => request match {
                 case IndexHtml(url, docString) =>
-                    log.debug("IndexHtml {}", url)
+                    log.debug("IndexHtml({})", url)
                     val doc = Jsoup.parse(docString, url.toExternalForm)
                     val index = Index(links(doc), wordCounts(doc))
                     log.debug("About to send index for {}", url)

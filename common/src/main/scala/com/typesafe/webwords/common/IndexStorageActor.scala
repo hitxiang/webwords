@@ -48,14 +48,14 @@ class IndexStorageActor(mongoURI: Option[String])
                 sender.tell(CacheSize(cache.getCount()), context.parent)
 
             case CacheIndex(url, index) =>
-                log.debug("CacheIndex {} {}", url, index)
+                log.debug("CacheIndex({}, {})", url, index)
                 cache.insert(MongoDBObject("url" -> url,
                     "time" -> System.currentTimeMillis().toDouble,
                     "index" -> indexAsDBObject(index)))
                 sender.tell(IndexCached(url), context.parent)
 
             case FetchCachedIndex(url) =>
-                log.debug("FetchCachedIndex {}", url)
+                log.debug("FetchCachedIndex({})", url)
                 // "$natural" -> -1 means reverse insertion order
                 // i.e. most recent
                 val cursor =
@@ -113,7 +113,7 @@ class IndexStorageActor(mongoURI: Option[String])
             backoffRate = 0.20
         )))))
 
-    implicit val timeout = Timeout(5000 millis)
+    implicit val timeout = Timeout(5 seconds)
 
     override def receive = {
         case DropCache =>
