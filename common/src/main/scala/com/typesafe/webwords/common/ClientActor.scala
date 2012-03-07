@@ -34,19 +34,10 @@ class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
                     // we look in the cache, if that fails, ask spider to
                     // spider and then notify us, and then we look in the
                     // cache again.
-                    def getWithoutCache = {
-                        import context.dispatcher
-                        getFromWorker(client, url) flatMap { _ =>
-                            getFromCacheOrElse(cache, url, cacheHit = false) {
-                                Promise.successful(GotIndex(url, index = None, cacheHit = false))
-                            }
-                        }
-                    }
-
                     val futureGotIndex = if (skipCache)
-                        getWithoutCache
+                        getWithoutCache(client, cache, url)
                     else
-                        getFromCacheOrElse(cache, url, cacheHit = true) { getWithoutCache }
+                        getFromCacheOrElse(cache, url, cacheHit = true) { getWithoutCache(client, cache, url) }
 
                     futureGotIndex pipeTo sender
             }
@@ -70,4 +61,15 @@ class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
                 Unit
         }
     }
+
+    private def getWithoutCache(client: ActorRef, cache: ActorRef, url: String):Future[GotIndex] = {
+        import context.dispatcher
+        getFromWorker(client, url) flatMap { _ =>
+            getFromCacheOrElse(cache, url, cacheHit = false) {
+                Promise.successful(GotIndex(url, index = None, cacheHit = false))
+            }
+        }
+    }
+
+
 }

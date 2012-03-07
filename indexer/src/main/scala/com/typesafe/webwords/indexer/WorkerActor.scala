@@ -24,7 +24,11 @@ class WorkerActor(config: WebWordsConfig)
         request match {
             case SpiderAndCache(url) =>
                 log.debug("SpiderAndCache({})", url)
-                // TODO:ban comment this to explain logic
+                // Here we task the spider to Spider the url, and if the result is Spidered, we ask
+                // the cache to CacheIndex the index, and if that works we return SpideredAndCached.
+                // If anything goes wrong, we simply return SpideredAndCached anyway, since the one
+                // requesting the SpiderAndCache will try to read the result from the cache and check
+                // for failure there.
                 (spider ? Spider(new URL(url)) map {
                     case Spidered(_, index) => index
                 } flatMap {

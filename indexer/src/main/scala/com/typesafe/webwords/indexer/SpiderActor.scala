@@ -66,7 +66,7 @@ object SpiderActor {
         maybeFailedFetch.onSuccess({ case x => bodyFuture.complete(Right(x)) })
         maybeFailedFetch.onFailure({
             case e =>
-                log.info("Exception fetching '{}': {}: ", url, e.getClass.getSimpleName, e.getMessage)
+                log.info("Exception fetching '{}': {}: {}", url, e.getClass.getSimpleName, e.getMessage)
                 // and just pretend we got an empty document.
                 bodyFuture.complete(Right(""))
         })

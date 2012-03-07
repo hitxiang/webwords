@@ -39,13 +39,7 @@ sealed trait WorkQueueRequest extends WorkQueueMessage {
 }
 case class SpiderAndCache(url: String) extends WorkQueueRequest
 
-object WorkQueueRequest {
-}
-
 sealed trait WorkQueueReply extends WorkQueueMessage {
     self: Product =>
 }
 case class SpideredAndCached(url: String) extends WorkQueueReply
-
-object WorkQueueReply {
-}

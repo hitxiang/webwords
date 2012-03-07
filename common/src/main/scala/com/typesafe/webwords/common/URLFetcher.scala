@@ -8,8 +8,7 @@ import akka.dispatch._
 import akka.pattern.pipe
 import akka.util.duration._
 import akka.event.LoggingAdapter
-import akka.util.Duration
-import java.util.concurrent.{TimeoutException, Executors}
+import java.util.concurrent.Executors
 
 
 sealed trait URLFetcherIncoming
@@ -144,13 +143,6 @@ object URLFetcher {
         }
 
         asyncHttpClient.prepareGet(u.toExternalForm()).execute(httpHandler)
-        p
-    }
-
-    def withTimeout[T](at: Duration, scheduler: akka.actor.Scheduler)(implicit executor: ExecutionContext): Promise[T] = {
-        val p = Promise[T]()
-        val cancellable = scheduler.scheduleOnce(at) { p.tryComplete(Left(new TimeoutException("Scheduled timeout"))) }
-        p.onComplete(_ => cancellable.cancel)
         p
     }
 }
