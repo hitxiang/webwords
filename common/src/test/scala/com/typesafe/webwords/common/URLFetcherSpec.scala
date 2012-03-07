@@ -8,7 +8,6 @@ import org.scalatest._
 import akka.actor._
 import akka.pattern.ask
 import akka.util.Timeout
-import akka.util.duration._
 import akka.dispatch.Await
 
 import javax.servlet.http.HttpServletResponse
@@ -31,7 +30,7 @@ class URLFetcherSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll
         httpServer = null
     }
 
-    implicit val timeout = Timeout(10 seconds)
+    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
 
     it should "fetch an url" in {
         val fetcher = system.actorOf(Props[URLFetcher])

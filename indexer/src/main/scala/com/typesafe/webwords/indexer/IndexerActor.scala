@@ -11,8 +11,6 @@ import org.jsoup.nodes.Document
 import scala.collection.parallel._
 import com.typesafe.webwords.common.Index
 import akka.routing.{DefaultResizer, SmallestMailboxRouter}
-import akka.dispatch.Await
-import akka.util.duration._
 
 sealed trait IndexerRequest
 case class IndexHtml(url: URL, doc: String) extends IndexerRequest

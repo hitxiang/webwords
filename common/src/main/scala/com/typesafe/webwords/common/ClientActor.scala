@@ -4,7 +4,6 @@ import akka.actor._
 import akka.dispatch._
 import akka.pattern.{ask, pipe}
 import akka.util.Timeout
-import akka.util.duration._
 import scala.Option
 
 sealed trait ClientActorIncoming
@@ -23,7 +22,7 @@ case class GotIndex(url: String, index: Option[Index], cacheHit: Boolean) extend
  */
 class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
 
-    private val client = context.actorOf(Props().withCreator({ new WorkQueueClientActor(config.indexerPath) }), "work-queue-client")
+    private val indexerWorker = context.system.actorFor(config.indexerPath)
     private val cache = context.actorOf(Props().withCreator({ new IndexStorageActor(config.mongoURL) }), "index-storage")
 
     override def receive = {
@@ -35,15 +34,15 @@ class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
                     // spider and then notify us, and then we look in the
                     // cache again.
                     val futureGotIndex = if (skipCache)
-                        getWithoutCache(client, cache, url)
+                        getWithoutCache(indexerWorker, cache, url)
                     else
-                        getFromCacheOrElse(cache, url, cacheHit = true) { getWithoutCache(client, cache, url) }
+                        getFromCacheOrElse(cache, url, cacheHit = true) { getWithoutCache(indexerWorker, cache, url) }
 
                     futureGotIndex pipeTo sender
             }
     }
 
-    implicit val timeout = Timeout(10 seconds)
+    implicit val timeout = Timeout(context.system.settings.config.getMilliseconds("akka.timeout.default"))
 
     private def getFromCacheOrElse(cache: ActorRef, url: String, cacheHit: Boolean)(fallback: => Future[GotIndex]): Future[GotIndex] = {
         import context.dispatcher

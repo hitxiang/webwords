@@ -5,9 +5,7 @@ import org.scalatest._
 import akka.actor._
 import akka.pattern.ask
 import akka.util.Timeout
-import akka.util.duration._
 import akka.dispatch.Await
-import java.net.URL
 import com.typesafe.webwords.common._
 
 class WorkerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll {
@@ -28,8 +26,8 @@ class WorkerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAl
     }
 
     behavior of "WorkerActor"
-    
-    implicit val timeout = Timeout(10 seconds)
+
+    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
 
     it should "get an index" in {
         val testdb = Some("mongodb://localhost/webwordsworkertest")

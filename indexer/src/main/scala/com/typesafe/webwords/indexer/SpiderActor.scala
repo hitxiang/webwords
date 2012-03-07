@@ -8,7 +8,6 @@ import com.typesafe.webwords.common._
 
 import akka.actor._
 import akka.pattern.{ask, pipe}
-import akka.util.duration._
 import akka.util.Timeout
 import akka.dispatch._
 import akka.event.LoggingAdapter
@@ -46,9 +45,9 @@ class SpiderActor
 }
 
 object SpiderActor {
-    implicit val timeout = Timeout(5 seconds)
 
     private def fetchBody(fetcher: ActorRef, url: URL, log: LoggingAdapter)(implicit context: ActorContext): Future[String] = {
+        implicit val timeout = Timeout(context.system.settings.config.getMilliseconds("akka.timeout.default"))
         import context.dispatcher
         val fetched = fetcher ? FetchURL(url)
         // there may be a cleaner solution here than returning an empty
@@ -74,6 +73,7 @@ object SpiderActor {
     }
 
     private def fetchIndex(indexer: ActorRef, fetcher: ActorRef, url: URL, log: LoggingAdapter)(implicit context: ActorContext): Future[Index] = {
+        implicit val timeout = Timeout(context.system.settings.config.getMilliseconds("akka.timeout.default"))
         fetchBody(fetcher, url, log) flatMap { body =>
             val indexed = indexer ? IndexHtml(url, body)
             indexed map {

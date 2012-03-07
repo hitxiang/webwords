@@ -4,9 +4,6 @@ import akka.actor._
 import akka.pattern.ask
 import com.typesafe.webwords.common._
 import java.util.concurrent.CountDownLatch
-import akka.dispatch.Await
-import akka.util.duration._
-import akka.util.Timeout
 
 /**
  * This is the main() method for the indexer (worker) process.

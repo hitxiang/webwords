@@ -16,7 +16,6 @@ import java.net.URISyntaxException
 import akka.actor.{Props, ActorSystem}
 import akka.pattern.ask
 import akka.util.Timeout
-import akka.util.duration._
 
 /**
  * This is the main application for the web process.
@@ -166,7 +165,7 @@ object WebMain extends Application {
         val parsedUrl = parseURL(url)
 
         if (parsedUrl.isDefined) {
-            implicit val timeout = Timeout(10 seconds)
+            implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
             val startTime = System.currentTimeMillis
 
             AsyncResult {

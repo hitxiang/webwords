@@ -1,9 +1,7 @@
 package com.typesafe.webwords.indexer
 
 import akka.actor._
-import akka.dispatch._
-import akka.pattern.ask
-import akka.util.duration._
+import akka.pattern.{ask, pipe}
 import com.typesafe.webwords.common._
 import java.net.URL
 import akka.util.Timeout
@@ -13,15 +11,15 @@ import akka.util.Timeout
  * It's the "root" actor of the indexer process.
  */
 class WorkerActor(config: WebWordsConfig)
-    extends WorkQueueWorkerActor with ActorLogging {
+    extends Actor with ActorLogging {
 
     private val spider = context.actorOf(Props[SpiderActor], "spider")
     private val cache = context.actorOf(Props().withCreator({ new IndexStorageActor(config.mongoURL) }), "index-storage")
 
-    implicit val timeout = Timeout(10 seconds) // TODO:ban get from config
+    implicit val timeout = Timeout(context.system.settings.config.getMilliseconds("akka.timeout.default"))
 
-    override def handleRequest(request: WorkQueueRequest): Future[WorkQueueReply] = {
-        request match {
+    def receive = {
+        case request: WorkQueueRequest => request match {
             case SpiderAndCache(url) =>
                 log.debug("SpiderAndCache({})", url)
                 // Here we task the spider to Spider the url, and if the result is Spidered, we ask
@@ -35,7 +33,7 @@ class WorkerActor(config: WebWordsConfig)
                     index => cache ? CacheIndex(url, index) map { _ => SpideredAndCached(url) }
                 } recover {
                     case _ => SpideredAndCached(url)
-                }).mapTo[WorkQueueReply]
+                }).mapTo[WorkQueueReply] pipeTo sender
         }
     }
 }

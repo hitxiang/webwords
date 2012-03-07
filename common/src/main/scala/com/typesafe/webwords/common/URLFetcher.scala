@@ -10,7 +10,6 @@ import akka.util.duration._
 import akka.event.LoggingAdapter
 import java.util.concurrent.Executors
 
-
 sealed trait URLFetcherIncoming
 case class FetchURL(u: URL) extends URLFetcherIncoming
 

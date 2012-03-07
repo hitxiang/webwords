@@ -5,7 +5,6 @@ import org.scalatest._
 import akka.actor._
 import java.net.URL
 import akka.util.Timeout
-import akka.util.duration._
 import akka.pattern.ask
 import akka.dispatch.{Await, Future}
 
@@ -14,7 +13,7 @@ class IndexStorageActorSpec extends FlatSpec with ShouldMatchers with BeforeAndA
 
     override def afterAll = { system.shutdown() }
 
-    implicit val timeout = Timeout(10 seconds)
+    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
 
     private val sampleIndex = Index(
         links = Seq(

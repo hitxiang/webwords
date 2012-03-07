@@ -13,7 +13,6 @@ import com.mongodb.casbah.WriteConcern
 import akka.routing.{DefaultResizer, SmallestMailboxRouter}
 import com.mongodb.{MongoException, DBObject}
 import akka.util.Timeout
-import akka.util.duration._
 
 sealed trait IndexStorageRequest
 case class CacheIndex(url: String, index: Index) extends IndexStorageRequest
@@ -113,7 +112,7 @@ class IndexStorageActor(mongoURI: Option[String])
             backoffRate = 0.20
         )))))
 
-    implicit val timeout = Timeout(5 seconds)
+    implicit val timeout = Timeout(context.system.settings.config.getMilliseconds("akka.timeout.default"))
 
     override def receive = {
         case DropCache =>

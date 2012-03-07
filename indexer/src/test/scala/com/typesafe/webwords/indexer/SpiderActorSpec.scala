@@ -5,10 +5,8 @@ import org.scalatest._
 import akka.actor._
 import akka.pattern.ask
 import akka.util.Timeout
-import akka.util.duration._
 import akka.dispatch.Await
 
-//import java.net.URL
 import com.typesafe.webwords.common._
 import java.net.URI
 
@@ -29,7 +27,7 @@ class SpiderActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAl
         httpServer = null
     }
 
-    implicit val timeout = Timeout(10 seconds)
+    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
 
     behavior of "local http server used to test spider"
 

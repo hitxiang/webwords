@@ -5,7 +5,6 @@ import org.scalatest._
 import scala.io.Source
 import akka.actor._
 import akka.pattern.ask
-import akka.util.duration._
 import java.net.URL
 import akka.util.Timeout
 import akka.dispatch.Await
@@ -90,7 +89,7 @@ class IndexerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterA
             ("higher", 11), ("data", 11), ("2011", 11), ("2008", 11), ("logic", 11), ("type", 11), ("29", 11),
             ("other", 11), ("2007", 10), ("Language", 10), ("contrast", 10)))
 
-    implicit val timeout = Timeout(5 seconds)
+    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
 
     it should "index some sample HTML" in {
         val html = load("Functional_programming.html")
