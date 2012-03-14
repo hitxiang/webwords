@@ -23,7 +23,7 @@ case class GotIndex(url: String, index: Option[Index], cacheHit: Boolean) extend
 class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
 
     private val indexerWorker = context.system.actorFor(config.indexerPath)
-    private val cache = context.actorOf(Props().withCreator({ new IndexStorageActor(config.mongoURL) }), "index-storage")
+    private val cache = context.actorOf(Props(new IndexStorageActor(config.mongoURL)), "index-storage")
 
     override def receive = {
         case incoming: ClientActorIncoming =>

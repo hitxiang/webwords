@@ -34,9 +34,9 @@ class WorkerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAl
         val testIndexerPath=ActorPath.fromString("akka://WorkerActorSpec@127.0.0.1:14711/user/index-worker")
         val config = WebWordsConfig(testIndexerPath, testdb, None)
         val url = httpServer.resolve("/resource/ToSpider.html")
-        val worker = system.actorOf(Props().withCreator({ new WorkerActor(config) }), "index-worker")
+        val worker = system.actorOf(Props(new WorkerActor(config)), "index-worker")
         Thread.sleep(500) // help ensure worker's amqp exchange is set up
-        val client = system.actorOf(Props().withCreator({ new ClientActor(config) }))
+        val client = system.actorOf(Props(new ClientActor(config)))
         val indexFuture = (client ? GetIndex(url.toExternalForm, skipCache = false)) map {
             case GotIndex(url, Some(index), cacheHit) =>
                 index

@@ -14,7 +14,7 @@ class WorkerActor(config: WebWordsConfig)
     extends Actor with ActorLogging {
 
     private val spider = context.actorOf(Props[SpiderActor], "spider")
-    private val cache = context.actorOf(Props().withCreator({ new IndexStorageActor(config.mongoURL) }), "index-storage")
+    private val cache = context.actorOf(Props(new IndexStorageActor(config.mongoURL)), "index-storage")
 
     implicit val timeout = Timeout(context.system.settings.config.getMilliseconds("akka.timeout.default"))
 

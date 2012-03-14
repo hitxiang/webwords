@@ -23,17 +23,20 @@ import akka.util.Timeout
  */
 object WebMain extends Application {
     private val system = ActorSystem("WebWordsWeb")
-    private val client = system.actorOf(Props().withCreator({ new ClientActor(WebWordsConfig()) }), "web-client")
+    private val client = system.actorOf(Props(new ClientActor(WebWordsConfig())), "web-client")
 
     def route = {
+
         case GET(Path("/")) => Action {
             Ok(wordsPage(form("", false), Nil)).as("text/html")
         }
+
         case GET(Path("/words")) => Action { implicit request =>
             wordsForm.bindFromRequest.fold(
             formWithErrors => BadRequest(wordsPage(form("", false, true), Nil)).as("text/html"),
             { case (url, skipCache) => handleWords(url, skipCache.getOrElse(false)) })
         }
+
     }
 
     val wordsForm = Form(
@@ -173,7 +176,7 @@ object WebMain extends Application {
                     case GotIndex(url, indexOption, cacheHit) =>
                         val elapsed = System.currentTimeMillis - startTime
                         if (indexOption.isDefined) {
-                            val html = wordsPage(form(url, skipCache), results(url, indexOption.get, false, elapsed))
+                            val html = wordsPage(form(url, skipCache), results(url, indexOption.get, cacheHit, elapsed))
                             Ok(completeWithHtml(html)).as("text/html")
                         } else {
                             Ok(completeWithHtml(<H1>Failed to index url in { elapsed } ms (try reloading)</H1>)).as("text/html")

@@ -11,6 +11,9 @@ import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import akka.dispatch._
 import akka.event.LoggingAdapter
+import akka.routing.SmallestMailboxRouter._
+import akka.routing.DefaultResizer._
+import akka.routing.{DefaultResizer, SmallestMailboxRouter}
 
 sealed trait SpiderRequest
 case class Spider(url: URL) extends SpiderRequest
@@ -31,7 +34,23 @@ case class Spidered(url: URL, index: Index)
 class SpiderActor
     extends Actor with ActorLogging {
 
-    private val indexer = context.actorOf(Props[IndexerActor], "indexer")
+    // attempt at CPU-bound fan-out
+    private val indexer = context.actorOf(Props[IndexerActor].withRouter(
+        SmallestMailboxRouter(resizer = Option(DefaultResizer(
+        // BoundedCapacitor: create between lowerBound and upperBound delegates in the pool
+        lowerBound = 1,
+        upperBound = Runtime.getRuntime().availableProcessors() * 2,
+        // BasicRampup: rampupRate is percentage increase in capacity when all delegates are busy
+        // make this very small to aim for just 1 more actor per needed connection
+        rampupRate = 0.2,
+        // BasicBackoff: backoffThreshold is the percentage-busy to drop below before
+        // we reduce actor count
+        backoffThreshold = 0.7,
+        // BasicBackoff: backoffRate is the amount to back off when we are below backoffThreshold.
+        // this one is intended to be less than 1.0-backoffThreshold so we keep some slack.
+        backoffRate = 0.20
+    )))), "indexer")
+
     private val fetcher = context.actorOf(Props[URLFetcher], "url-fetcher")
 
     override def receive = {

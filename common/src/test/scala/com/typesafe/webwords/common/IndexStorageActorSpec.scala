@@ -37,8 +37,7 @@ class IndexStorageActorSpec extends FlatSpec with ShouldMatchers with BeforeAndA
     private val exampleUrl = new URL("http://example.com/")
     private val exampleUrl2 = new URL("http://example2.com/")
 
-    private def newActor = system.actorOf(Props[IndexStorageActor].withCreator({
-        new IndexStorageActor(Some("mongodb://localhost/webwordstest")) }))
+    private def newActor = system.actorOf(Props(new IndexStorageActor(Some("mongodb://localhost/webwordstest"))))
 
     behavior of "IndexStorageActor"
 

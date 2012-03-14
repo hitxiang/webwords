@@ -15,7 +15,7 @@ object Main extends App {
 
     val config = WebWordsConfig()
 
-    val worker = system.actorOf(Props().withCreator({ new WorkerActor(config) }), "index-worker")
+    val worker = system.actorOf(Props(new WorkerActor(config)), "index-worker")
 
     // kind of a hack maybe.
     val waitForever = new CountDownLatch(1)

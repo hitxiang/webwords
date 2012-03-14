@@ -25,84 +25,56 @@ case class IndexedHtml(index: Index) extends IndexerReply
  * parallel collections.
  */
 class IndexerActor
-  extends Actor with ActorLogging {
+    extends Actor with ActorLogging {
 
-    private class Worker
-      extends Actor with ActorLogging {
-        import IndexerActor._
+    import IndexerActor._
 
-        private def links(doc: Document) = {
-            val as = doc.select("a").asScala
-            val builder = Map.newBuilder[String, String]
-            for (a <- as) {
-                val text = a.text
-                val href = try {
-                    // be paranoid here and we don't have to worry about it
-                    // anywhere else in the code.
-                    val maybeInvalid = a.attr("abs:href")
-                    if (maybeInvalid.isEmpty)
-                        throw new URISyntaxException(maybeInvalid, "empty URI")
-                    new URI(maybeInvalid)
-                    new URL(maybeInvalid)
-                    maybeInvalid
-                } catch {
-                    case e: URISyntaxException =>
-                        ""
-                    case e: MalformedURLException =>
-                        ""
-                }
-
-                if (href.nonEmpty && text.nonEmpty)
-                    builder += (text -> href)
+    private def links(doc: Document) = {
+        val as = doc.select("a").asScala
+        val builder = Map.newBuilder[String, String]
+        for (a <- as) {
+            val text = a.text
+            val href = try {
+                // be paranoid here and we don't have to worry about it
+                // anywhere else in the code.
+                val maybeInvalid = a.attr("abs:href")
+                if (maybeInvalid.isEmpty)
+                    throw new URISyntaxException(maybeInvalid, "empty URI")
+                new URI(maybeInvalid)
+                new URL(maybeInvalid)
+                maybeInvalid
+            } catch {
+                case e: URISyntaxException =>
+                    ""
+                case e: MalformedURLException =>
+                    ""
             }
-            builder.result.toSeq.sortBy(_._1)
-        }
 
-        private def wordCounts(doc: Document) = {
-            val body = doc.select("body").first
-            // splitWords creates a parallel collection so this is multithreaded!
-            // in a real app you'd want to profile and see if this makes sense;
-            // it may well not depending on workload, number of cores, etc.
-            // but it's interesting to see how to do it.
-            val words = splitWords(body.text) filter { !boring(_) }
-            wordCount(words).toSeq.sortBy(0 - _._2) take 50
+            if (href.nonEmpty && text.nonEmpty)
+                builder += (text -> href)
         }
-
-        override def receive = {
-            case request: IndexerRequest => request match {
-                case IndexHtml(url, docString) =>
-                    log.debug("IndexHtml({})", url)
-                    val doc = Jsoup.parse(docString, url.toExternalForm)
-                    val index = Index(links(doc), wordCounts(doc))
-                    log.debug("About to send index for {}", url)
-                    sender.tell(IndexedHtml(index), context.parent)
-            }
-        }
+        builder.result.toSeq.sortBy(_._1)
     }
 
-    // attempt at CPU-bound fan-out
-    lazy val router = context.actorOf(Props().withCreator({ new Worker }).withRouter(
-        SmallestMailboxRouter(resizer = Option(DefaultResizer(
-            // BoundedCapacitor: create between lowerBound and upperBound delegates in the pool
-            lowerBound = 1,
-            upperBound = Runtime.getRuntime().availableProcessors() * 2,
-            // BasicRampup: rampupRate is percentage increase in capacity when all delegates are busy
-            // make this very small to aim for just 1 more actor per needed connection
-            rampupRate = 0.2,
-            // BasicBackoff: backoffThreshold is the percentage-busy to drop below before
-            // we reduce actor count
-            backoffThreshold = 0.7,
-            // BasicBackoff: backoffRate is the amount to back off when we are below backoffThreshold.
-            // this one is intended to be less than 1.0-backoffThreshold so we keep some slack.
-            backoffRate = 0.20
-        )))))
-
+    private def wordCounts(doc: Document) = {
+        val body = doc.select("body").first
+        // splitWords creates a parallel collection so this is multithreaded!
+        // in a real app you'd want to profile and see if this makes sense;
+        // it may well not depending on workload, number of cores, etc.
+        // but it's interesting to see how to do it.
+        val words = splitWords(body.text) filter { !boring(_) }
+        wordCount(words).toSeq.sortBy(0 - _._2) take 50
+    }
 
     override def receive = {
-        case m =>
-            log.debug("IndexerActor handing of to router")
-            // send messages to the router
-            router forward m
+        case request: IndexerRequest => request match {
+            case IndexHtml(url, docString) =>
+                log.debug("IndexHtml({})", url)
+                val doc = Jsoup.parse(docString, url.toExternalForm)
+                val index = Index(links(doc), wordCounts(doc))
+                log.debug("About to send index for {}", url)
+                sender.tell(IndexedHtml(index), context.parent)
+        }
     }
 }
 

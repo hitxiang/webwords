@@ -95,23 +95,6 @@ class IndexStorageActor(mongoURI: Option[String])
         }
     }
 
-    // attempt at IO-bound fan-out
-    lazy val router = context.actorOf(Props().withCreator({ new Worker(cache.get) }).withRouter(
-        SmallestMailboxRouter(resizer = Option(DefaultResizer(
-            // BoundedCapacitor: create between lowerBound and upperBound delegates in the pool
-            lowerBound = 1,
-            upperBound = 50,
-            // BasicRampup: rampupRate is percentage increase in capacity when all delegates are busy
-            // make this very small to aim for just 1 more actor per needed connection
-            rampupRate = 0.05,
-            // BasicBackoff: backoffThreshold is the percentage-busy to drop below before
-            // we reduce actor count
-            backoffThreshold = 0.7,
-            // BasicBackoff: backoffRate is the amount to back off when we are below backoffThreshold.
-            // this one is intended to be less than 1.0-backoffThreshold so we keep some slack.
-            backoffRate = 0.20
-        )))))
-
     implicit val timeout = Timeout(context.system.settings.config.getMilliseconds("akka.timeout.default"))
 
     override def receive = {
@@ -129,9 +112,10 @@ class IndexStorageActor(mongoURI: Option[String])
         case m =>
             log.debug("IndexStorageActor handing of {} to router", m)
             // send other messages to the router
-            router forward m
+            router.get forward m
     }
 
+    private[this] var router: Option[ActorRef] = None
     private[this] var connection: Option[MongoConnection] = None
     private[this] var database: Option[MongoDB] = None
     private[this] var cache: Option[MongoCollection] = None
@@ -209,6 +193,23 @@ class IndexStorageActor(mongoURI: Option[String])
         cache = database map { db => db(cacheName) }
 
         recreateCache()
+
+        // now create the router as an attempt at IO-bound fan-out
+        router = Option(context.actorOf(Props(new Worker(cache.get)).withRouter(
+            SmallestMailboxRouter(resizer = Option(DefaultResizer(
+                // BoundedCapacitor: create between lowerBound and upperBound delegates in the pool
+                lowerBound = 1,
+                upperBound = 50,
+                // BasicRampup: rampupRate is percentage increase in capacity when all delegates are busy
+                // make this very small to aim for just 1 more actor per needed connection
+                rampupRate = 0.05,
+                // BasicBackoff: backoffThreshold is the percentage-busy to drop below before
+                // we reduce actor count
+                backoffThreshold = 0.7,
+                // BasicBackoff: backoffRate is the amount to back off when we are below backoffThreshold.
+                // this one is intended to be less than 1.0-backoffThreshold so we keep some slack.
+                backoffRate = 0.20
+            )))), "index-storage-router"))
     }
 
     override def postStop() = {
