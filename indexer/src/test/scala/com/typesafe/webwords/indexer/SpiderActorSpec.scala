@@ -3,16 +3,14 @@ package com.typesafe.webwords.indexer
 import org.scalatest.matchers._
 import org.scalatest._
 import akka.actor._
-import akka.pattern.ask
 import akka.util.Timeout
-import akka.dispatch.Await
+import akka.testkit.{ImplicitSender, TestKit}
 
 import com.typesafe.webwords.common._
 import java.net.URI
 
-class SpiderActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll {
-
-    implicit val system = ActorSystem("SpiderActorSpec")
+class SpiderActorSpec extends TestKit(ActorSystem("SpiderActorSpec")) with FlatSpec with ShouldMatchers
+    with BeforeAndAfterAll with ImplicitSender {
 
     var httpServer: TestHttpServer = null
 
@@ -27,20 +25,20 @@ class SpiderActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAl
         httpServer = null
     }
 
-    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
+    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.test"))
 
     behavior of "local http server used to test spider"
 
     it should "fetch our test resource" in {
         val fetcher = system.actorOf(Props[URLFetcher])
-        val f = fetcher ? FetchURL(httpServer.resolve("/resource/Functional_programming.html"))
-        Await.result(f, timeout.duration) match {
-            case URLFetched(status, headers, body) =>
-                if (status != 200)
-                    println(body)
-                status should be(200)
-            case _ =>
-                throw new Exception("Wrong reply message from fetcher")
+        within(timeout.duration) {
+            fetcher ! FetchURL(httpServer.resolve("/resource/Functional_programming.html"))
+            expectMsgType[URLFetched] match {
+                case URLFetched(url, status, headers, body) =>
+                    if (status != 200)
+                        println(body)
+                    status should be(200)
+            }
         }
         system.stop(fetcher)
     }
@@ -125,14 +123,14 @@ class SpiderActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAl
     it should "spider from test http server" in {
         val url = httpServer.resolve("/resource/ToSpider.html")
         val spider = system.actorOf(Props[SpiderActor])
-        val indexFuture = (spider ? Spider(url)) map {
-            case Spidered(url, index) =>
-                index
-            case whatever =>
-                throw new Exception("Got bad result from Spider: " + whatever)
+        val index = within(timeout.duration) {
+            spider ! Spider(url)
+            expectMsgType[Spidered] match {
+                case Spidered(gotURL, index) =>
+                    gotURL should be(url)
+                    index
+            }
         }
-        val index = Await.result(indexFuture, timeout.duration)
-
         index.wordCounts.size should be(50)
         val nowheres = (index.links filter { link => link._2.endsWith("/nowhere") } map { _._1 }).sorted
         nowheres should be(Seq("a", "d", "e", "f", "g", "h", "j", "k", "m", "o"))

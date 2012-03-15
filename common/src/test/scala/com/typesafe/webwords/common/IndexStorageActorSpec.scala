@@ -5,15 +5,14 @@ import org.scalatest._
 import akka.actor._
 import java.net.URL
 import akka.util.Timeout
-import akka.pattern.ask
-import akka.dispatch.{Await, Future}
+import akka.testkit.{ImplicitSender, TestKit}
 
-class IndexStorageActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll {
-    implicit val system = ActorSystem("IndexerActorSpec")
+class IndexStorageActorSpec extends TestKit(ActorSystem("IndexActorSpec")) with FlatSpec with ShouldMatchers
+    with BeforeAndAfterAll with ImplicitSender {
 
     override def afterAll = { system.shutdown() }
 
-    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
+    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.test"))
 
     private val sampleIndex = Index(
         links = Seq(
@@ -41,72 +40,75 @@ class IndexStorageActorSpec extends FlatSpec with ShouldMatchers with BeforeAndA
 
     behavior of "IndexStorageActor"
 
-    private def cacheIndex(storage: ActorRef, url: URL, index: Index) = {
-        storage ! CacheIndex(url.toExternalForm, index)
+    private def cacheIndex(storage: ActorRef, url: String, index: Index) = {
+        storage ! CacheIndex(url, index)
+        expectMsg(IndexCached(url))
     }
 
-    private def fetchIndex(storage: ActorRef, url: URL): Future[Index] = {
-        (storage ? FetchCachedIndex(url.toExternalForm)) map {
-            case CachedIndexFetched(Some(index)) =>
-                index
-            case whatever =>
-                throw new Exception("failed to get index, got: " + whatever)
-        }
+    private def fetchIndex(storage: ActorRef, url: String, index: Index) = {
+        storage ! FetchCachedIndex(url)
+        expectMsg(CachedIndexFetched(Some(index)))
     }
 
-    private def cacheSize(storage: ActorRef): Future[Long] = {
-        (storage ? GetCacheSize) map {
-            case CacheSize(x) => x
-            case whatever =>
-                throw new Exception("failed to get cache size, got: " + whatever)
-        }
+    private def cacheSize(storage: ActorRef, size: Long) = {
+        storage ! GetCacheSize
+        expectMsg(CacheSize(size))
     }
 
     it should "drop the cache in case of leftovers" in {
         val storage = newActor
-        storage ! DropCache
-        val size = Await.result(cacheSize(storage), timeout.duration)
-        size should be(0)
+        within(timeout.duration) {
+            storage ! DropCache
+            cacheSize(storage, 0)
+        }
         system.stop(storage)
     }
 
     it should "store and retrieve an index" in {
         val storage = newActor
-        cacheIndex(storage, exampleUrl, sampleIndex)
-        val fetched = Await.result(fetchIndex(storage, exampleUrl), timeout.duration)
-        fetched should be(sampleIndex)
+        val url = exampleUrl.toExternalForm
+        within(timeout.duration) {
+            cacheIndex(storage, url, sampleIndex)
+            fetchIndex(storage, url, sampleIndex)
+            cacheSize(storage, 1)
+        }
         system.stop(storage)
     }
 
     it should "store and retrieve an empty index" in {
         val storage = newActor
-        cacheIndex(storage, exampleUrl2, emptyIndex)
-        val fetched = Await.result(fetchIndex(storage, exampleUrl2), timeout.duration)
-        fetched should be(emptyIndex)
+        val url = exampleUrl2.toExternalForm
+        within(timeout.duration) {
+            cacheIndex(storage, url, emptyIndex)
+            fetchIndex(storage, url, emptyIndex)
+            cacheSize(storage, 2)
+        }
         system.stop(storage)
     }
 
     it should "use the newest entry" in {
         val storage = newActor
-        // check we have leftovers from previous test
-        val fetched = Await.result(fetchIndex(storage, exampleUrl), timeout.duration)
-        fetched should be(sampleIndex)
-        // now replace the leftovers
-        cacheIndex(storage, exampleUrl, anotherIndex)
-        val newIndex = Await.result(fetchIndex(storage, exampleUrl), timeout.duration)
-        newIndex should be(anotherIndex)
+        val url = exampleUrl.toExternalForm
+        within(timeout.duration) {
+            // check we have leftovers from previous test
+            fetchIndex(storage, url, sampleIndex)
+            // now replace the leftovers
+            cacheIndex(storage, url, anotherIndex)
+            fetchIndex(storage, url, anotherIndex)
+        }
         system.stop(storage)
     }
 
     it should "drop the cache" in {
         val storage = newActor
-        // check we have leftovers from a previous test
-        val fetched = Await.result(fetchIndex(storage, exampleUrl), timeout.duration)
-        fetched should be(anotherIndex)
-        storage ! DropCache
-        val size = Await.result(cacheSize(storage), timeout.duration)
-        size should be(0)
+        val url = exampleUrl.toExternalForm
+        within(timeout.duration) {
+            // check we have leftovers from a previous test
+            fetchIndex(storage, url, anotherIndex)
+            // drop the cache
+            storage ! DropCache
+            cacheSize(storage, 0)
+        }
         system.stop(storage)
     }
-
 }

@@ -14,7 +14,7 @@ sealed trait URLFetcherIncoming
 case class FetchURL(u: URL) extends URLFetcherIncoming
 
 sealed trait URLFetcherOutgoing
-case class URLFetched(status: Int, headers: Map[String, String], body: String) extends URLFetcherOutgoing
+case class URLFetched(url: URL, status: Int, headers: Map[String, String], body: String) extends URLFetcherOutgoing
 
 /**
  * This is an actor which encapsulates the AsyncHttpClient library.
@@ -136,7 +136,7 @@ object URLFetcher {
 
                     val body = response.getResponseBody()
 
-                    p.complete(Right(URLFetched(response.getStatusCode(), headers, body)))
+                    p.complete(Right(URLFetched(u, response.getStatusCode(), headers, body)))
                 }
             }
         }

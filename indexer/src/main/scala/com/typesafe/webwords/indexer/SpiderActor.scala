@@ -11,8 +11,6 @@ import akka.pattern.{ask, pipe}
 import akka.util.Timeout
 import akka.dispatch._
 import akka.event.LoggingAdapter
-import akka.routing.SmallestMailboxRouter._
-import akka.routing.DefaultResizer._
 import akka.routing.{DefaultResizer, SmallestMailboxRouter}
 
 sealed trait SpiderRequest
@@ -73,10 +71,10 @@ object SpiderActor {
         // document on failure, but let's go with this for now
         val bodyFuture = new DefaultPromise[String]
         val maybeFailedFetch = fetched map {
-            case URLFetched(status, headers, body) if status == 200 =>
+            case URLFetched(url, status, headers, body) if status == 200 =>
                 // FIXME should probably filter out non-HTML content types
                 body
-            case URLFetched(status, headers, body) =>
+            case URLFetched(url, status, headers, body) =>
                 throw new Exception("Failed to fetch, status: " + status)
             case whatever =>
                 throw new IllegalStateException("Unexpected reply to url fetch: " + whatever)

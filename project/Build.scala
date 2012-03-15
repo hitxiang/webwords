@@ -45,6 +45,7 @@ object Dependencies {
     val akkaVersion = "2.0"
     val akka = "com.typesafe.akka" % "akka-actor" % akkaVersion
     val akkaRemote = "com.typesafe.akka" % "akka-remote" % akkaVersion
+    val akkaTestKit = "com.typesafe.akka" % "akka-testkit" % akkaVersion % "test"
 
     val asyncHttp = "com.ning" % "async-http-client" % "1.6.5"
 
@@ -85,6 +86,6 @@ object WebWordsBuild extends Build {
     lazy val common = Project("webwords-common",
         file("common"),
         settings = projectSettings ++
-            Seq(libraryDependencies ++= Seq(akka, akkaRemote, asyncHttp, casbahCore)))
+            Seq(libraryDependencies ++= Seq(akka, akkaRemote, akkaTestKit, asyncHttp, casbahCore)))
 }
 

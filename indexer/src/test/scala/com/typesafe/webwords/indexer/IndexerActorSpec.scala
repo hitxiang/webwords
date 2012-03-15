@@ -4,15 +4,15 @@ import org.scalatest.matchers._
 import org.scalatest._
 import scala.io.Source
 import akka.actor._
-import akka.pattern.ask
 import java.net.URL
 import akka.util.Timeout
-import akka.dispatch.Await
+import akka.testkit.{ImplicitSender, TestKit}
+import akka.testkit.TestActor.AutoPilot
 
-class IndexerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll {
+class IndexerActorSpec extends TestKit(ActorSystem("IndexerActorSpec")) with FlatSpec with ShouldMatchers
+    with BeforeAndAfterAll with ImplicitSender {
+
     behavior of "splitWords"
-
-    implicit val system = ActorSystem("IndexerActorSpec")
 
     override def afterAll = { system.shutdown() }
 
@@ -89,27 +89,50 @@ class IndexerActorSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterA
             ("higher", 11), ("data", 11), ("2011", 11), ("2008", 11), ("logic", 11), ("type", 11), ("29", 11),
             ("other", 11), ("2007", 10), ("Language", 10), ("contrast", 10)))
 
-    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
+    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.test"))
 
     it should "index some sample HTML" in {
         val html = load("Functional_programming.html")
         val indexer = system.actorOf(Props[IndexerActor])
-        val future = indexer ? IndexHtml(new URL("http://en.wikipedia.org/wiki/"), html)
-        val result = Await.result(future.mapTo[IndexedHtml], timeout.duration)
-        result.index.links.size should be(593)
-        result.index.wordCounts.toSeq should be(wordsInSamples("Functional_programming.html"))
+        within(timeout.duration) {
+            indexer ! IndexHtml(new URL("http://en.wikipedia.org/wiki/"), html)
+            expectMsgType[IndexedHtml] match {
+                case IndexedHtml(index) =>
+                    index.links.size should be(593)
+                    index.wordCounts.toSeq should be(wordsInSamples("Functional_programming.html"))
+            }
+        }
         system.stop(indexer)
     }
 
     it should "index a lot of HTML concurrently" in {
         val html = load("Functional_programming.html")
         val indexer = system.actorOf(Props[IndexerActor])
-        val futures = for (i <- 1 to 20)
-            yield indexer ? IndexHtml(new URL("http://en.wikipedia.org/wiki/"), html)
-        for (f <- futures) {
-            val result = Await.result(f.mapTo[IndexedHtml], timeout.duration)
-            result.index.links.size should be(593)
-            result.index.wordCounts.toSeq should be(wordsInSamples("Functional_programming.html"))
+        val numMsgs = 20
+        within(timeout.duration) {
+            // check all replies that we get
+            setAutoPilot(new AutoPilot {
+                var numProcessedMsgs = 0
+                def run(sender: ActorRef, msg: Any): Option[AutoPilot] = {
+                    msg match {
+                        case IndexedHtml(index) =>
+                            index.links.size should be(593)
+                            index.wordCounts.toSeq should be(wordsInSamples("Functional_programming.html"))
+                        case whatever =>
+                            throw new IllegalStateException("Unexpected reply to url fetch: " + whatever)
+                    }
+                    numProcessedMsgs = numProcessedMsgs + 1
+                    if (numProcessedMsgs < numMsgs)
+                        Option(this)
+                    else
+                        None
+                }
+            })
+            // send all messages
+            for (i <- 1 to numMsgs)
+                indexer ! IndexHtml(new URL("http://en.wikipedia.org/wiki/"), html)
+            // wait for all replies
+            receiveN(numMsgs)
         }
         system.stop(indexer)
     }

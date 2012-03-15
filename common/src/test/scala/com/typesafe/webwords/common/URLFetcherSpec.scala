@@ -1,21 +1,18 @@
 package com.typesafe.webwords.common
 
-import scala.collection.JavaConverters._
-
 import org.scalatest.matchers._
 import org.scalatest._
 
 import akka.actor._
-import akka.pattern.ask
 import akka.util.Timeout
-import akka.dispatch.Await
+import akka.testkit.{ImplicitSender, TestKit}
+import akka.testkit.TestActor.AutoPilot
 
 import javax.servlet.http.HttpServletResponse
 
-class URLFetcherSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll {
+class URLFetcherSpec extends TestKit(ActorSystem("URLFetcherSpec")) with FlatSpec with ShouldMatchers
+    with BeforeAndAfterAll with ImplicitSender {
     behavior of "URLFetcher"
-
-    implicit val system = ActorSystem("URLFetcherSpec")
 
     var httpServer: TestHttpServer = null
 
@@ -30,29 +27,29 @@ class URLFetcherSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll
         httpServer = null
     }
 
-    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.default"))
+    implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.test"))
 
     it should "fetch an url" in {
         val fetcher = system.actorOf(Props[URLFetcher])
-        val f = fetcher ? FetchURL(httpServer.resolve("/hello"))
-        Await.result(f, timeout.duration) match {
-            case URLFetched(status, headers, body) =>
-                status should be(HttpServletResponse.SC_OK)
-                body should be("Hello\n")
-            case _ =>
-                throw new Exception("Wrong reply message from fetcher")
+        within(timeout.duration) {
+            fetcher ! FetchURL(httpServer.resolve("/hello"))
+            expectMsgType[URLFetched] match {
+                case URLFetched(url, status, headers, body) =>
+                    status should be(HttpServletResponse.SC_OK)
+                    body should be("Hello\n")
+            }
         }
         system.stop(fetcher)
     }
 
     it should "handle a 404" in {
         val fetcher = system.actorOf(Props[URLFetcher])
-        val f = fetcher ? FetchURL(httpServer.resolve("/nothere"))
-        Await.result(f, timeout.duration) match {
-            case URLFetched(status, headers, body) =>
-                status should be(HttpServletResponse.SC_NOT_FOUND)
-            case _ =>
-                throw new Exception("Wrong reply message from fetcher")
+        within(timeout.duration) {
+            fetcher ! FetchURL(httpServer.resolve("/nothere"))
+            expectMsgType[URLFetched] match {
+                case URLFetched(url, status, headers, body) =>
+                    status should be(HttpServletResponse.SC_NOT_FOUND)
+            }
         }
         system.stop(fetcher)
     }
@@ -63,37 +60,42 @@ class URLFetcherSpec extends FlatSpec with ShouldMatchers with BeforeAndAfterAll
         httpServer.withRandomLatency(300) {
             val fetcher = system.actorOf(Props[URLFetcher])
             val numToFetch = 500
-            val responses = for (i <- 1 to numToFetch)
-                yield (fetcher ? FetchURL(httpServer.resolve("/echo", "what", i.toString)), i)
 
-            val completionOrder = new java.util.concurrent.ConcurrentLinkedQueue[Int]()
+            within(timeout.duration) {
+                var completed: List[Int] = List()
 
-            responses foreach { tuple =>
-                tuple._1.onComplete({ f =>
-                    completionOrder.add(tuple._2)
+                // check all replies that we get
+                setAutoPilot(new AutoPilot {
+                    var numProcessedMsgs = 0
+                    def run(sender: ActorRef, msg: Any): Option[AutoPilot] = {
+
+                        msg match {
+                            case URLFetched(url, status, headers, body) =>
+                                status should be(HttpServletResponse.SC_OK)
+                                val expected = url.getQuery.split("=").last.toInt
+                                body should be(expected.toString)
+                                completed = completed :+ expected
+                            case whatever =>
+                                throw new IllegalStateException("Unexpected reply to url fetch: " + whatever)
+                        }
+                        numProcessedMsgs = numProcessedMsgs + 1
+                        if (numProcessedMsgs < numToFetch)
+                            Option(this)
+                        else
+                            None
+                    }
                 })
+
+                // send all messages
+                for (i <- 1 to numToFetch)
+                    fetcher ! FetchURL(httpServer.resolve("/echo", "what", i.toString))
+                // wait for all replies
+                receiveN(numToFetch)
+
+                completed.length should be(numToFetch)
+                // the random latency should mean we completed in semi-random order
+                completed should not be (completed.sorted)
             }
-
-            var nFetched = 0
-            responses foreach { tuple =>
-                val f = tuple._1
-                val expected = tuple._2.toString
-                Await.result(f, timeout.duration) match {
-                    case URLFetched(status, headers, body) =>
-                        status should be(HttpServletResponse.SC_OK)
-                        body should be(expected)
-                        nFetched += 1
-                    case _ =>
-                        throw new Exception("Wrong reply message from fetcher")
-                }
-            }
-            nFetched should be(numToFetch)
-
-            val completed = completionOrder.asScala.toList
-            completed.length should be(numToFetch)
-            // the random latency should mean we completed in semi-random order
-            completed should not be (completed.sorted)
-
             system.stop(fetcher)
         }
     }
