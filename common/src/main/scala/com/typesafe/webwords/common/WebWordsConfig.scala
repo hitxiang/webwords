@@ -1,19 +1,20 @@
 package com.typesafe.webwords.common
 
 import akka.actor.{ActorPath, Address}
+import com.typesafe.config.ConfigFactory
 
 
 /**
  * This class represents our app configuration.
  */
-case class WebWordsConfig(indexerPath: ActorPath, mongoURL: Option[String], port: Option[Int])
+case class WebWordsConfig(indexerPath: ActorPath, mongoURL: Option[String])
 
 object WebWordsConfig {
     def apply(): WebWordsConfig = {
-        val indexerPath = System.getenv("INDEXER_PATH")
-        val mongoURL = Option(System.getenv("MONGOHQ_URL"))
-        val port = Option(System.getenv("PORT")) map Integer.parseInt
-        val config = WebWordsConfig(ActorPath.fromString(indexerPath), mongoURL, port)
+        val conf = ConfigFactory.load()
+        val indexerPath = conf.getString("worker.indexer_path")
+        val mongoURL = Option(conf.getString("worker.mongodb_url"))
+        val config = WebWordsConfig(ActorPath.fromString(indexerPath), mongoURL)
         println("Configuration is: " + config)
         config
     }

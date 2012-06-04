@@ -23,7 +23,7 @@ case class GotIndex(url: String, index: Option[Index], cacheHit: Boolean) extend
 class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
 
     private val indexerWorker = context.system.actorFor(config.indexerPath)
-    private val cache = context.actorOf(Props(new IndexStorageActor(config.mongoURL)), "index-storage")
+    private val cacherWorker = context.actorOf(Props(new IndexStorageActor(config.mongoURL)), "index-storage")
 
     override def receive = {
         case incoming: ClientActorIncoming =>
@@ -34,9 +34,9 @@ class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
                     // spider and then notify us, and then we look in the
                     // cache again.
                     val futureGotIndex = if (skipCache)
-                        getWithoutCache(indexerWorker, cache, url)
+                        getWithoutCache(indexerWorker, cacherWorker, url)
                     else
-                        getFromCacheOrElse(cache, url, cacheHit = true) { getWithoutCache(indexerWorker, cache, url) }
+                        getFromCacheOrElse(cacherWorker, url, cacheHit = true) { getWithoutCache(indexerWorker, cacherWorker, url) }
 
                     futureGotIndex pipeTo sender
             }
@@ -44,9 +44,9 @@ class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
 
     implicit val timeout = Timeout(context.system.settings.config.getMilliseconds("akka.timeout.default"))
 
-    private def getFromCacheOrElse(cache: ActorRef, url: String, cacheHit: Boolean)(fallback: => Future[GotIndex]): Future[GotIndex] = {
+    private def getFromCacheOrElse(cacher: ActorRef, url: String, cacheHit: Boolean)(fallback: => Future[GotIndex]): Future[GotIndex] = {
         import context.dispatcher
-        cache ? FetchCachedIndex(url) flatMap {
+        cacher ? FetchCachedIndex(url) flatMap {
             case CachedIndexFetched(Some(index)) =>
                 Promise.successful(GotIndex(url, Some(index), cacheHit))
             case CachedIndexFetched(None) =>
@@ -54,16 +54,15 @@ class ClientActor(config: WebWordsConfig) extends Actor with ActorLogging {
         }
     }
 
-    private def getFromWorker(client: ActorRef, url: String): Future[Unit] = {
-        client ? SpiderAndCache(url) map {
-            case SpideredAndCached(returnedUrl) =>
-                Unit
+    private def getFromWorker(indexer: ActorRef, url: String): Future[Unit] = {
+        indexer ? SpiderAndCache(url) map {
+            case SpideredAndCached(returnedUrl) => Unit
         }
     }
 
-    private def getWithoutCache(client: ActorRef, cache: ActorRef, url: String):Future[GotIndex] = {
+    private def getWithoutCache(indexer: ActorRef, cache: ActorRef, url: String):Future[GotIndex] = {
         import context.dispatcher
-        getFromWorker(client, url) flatMap { _ =>
+        getFromWorker(indexer, url) flatMap { _ =>
             getFromCacheOrElse(cache, url, cacheHit = false) {
                 Promise.successful(GotIndex(url, index = None, cacheHit = false))
             }

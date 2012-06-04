@@ -36,7 +36,7 @@ class IndexStorageActorSpec extends TestKit(ActorSystem("IndexActorSpec")) with 
     private val exampleUrl = new URL("http://example.com/")
     private val exampleUrl2 = new URL("http://example2.com/")
 
-    private def newActor = system.actorOf(Props(new IndexStorageActor(Some("mongodb://localhost/webwordstest"))))
+    private def newActor = system.actorOf(Props(new IndexStorageActor(Some("mongodb://127.0.0.1/webwordstest"))))
 
     behavior of "IndexStorageActor"
 

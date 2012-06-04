@@ -30,7 +30,7 @@ class WorkerActorSpec extends TestKit(ActorSystem("WorkerActorSpec")) with FlatS
     it should "get an index" in {
         val testdb = Some("mongodb://localhost/webwordsworkertest")
         val testIndexerPath=ActorPath.fromString("akka://WorkerActorSpec@127.0.0.1:14711/user/index-worker")
-        val config = WebWordsConfig(testIndexerPath, testdb, None)
+        val config = WebWordsConfig(testIndexerPath, testdb)
         val url = httpServer.resolve("/resource/ToSpider.html")
         val worker = system.actorOf(Props(new WorkerActor(config)), "index-worker")
         val client = system.actorOf(Props(new ClientActor(config)))
