@@ -28,7 +28,7 @@ class WorkerActorSpec extends TestKit(ActorSystem("WorkerActorSpec")) with FlatS
     implicit val timeout = Timeout(system.settings.config.getMilliseconds("akka.timeout.test"))
 
     it should "get an index" in {
-        val testdb = Some("mongodb://localhost/webwordsworkertest")
+        val testdb = Some("mongodb://127.0.0.1/webwordsworkertest")
         val testIndexerPath=ActorPath.fromString("akka://WorkerActorSpec@127.0.0.1:14711/user/index-worker")
         val config = WebWordsConfig(testIndexerPath, testdb)
         val url = httpServer.resolve("/resource/ToSpider.html")
